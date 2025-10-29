@@ -1,0 +1,16 @@
+# dotnet
+bin/
+obj/
+*.user
+*.suo
+
+# Node
+node_modules/
+dist/
+
+# VS Code
+.vscode/
+
+# Docker
+**/out/
+.env
