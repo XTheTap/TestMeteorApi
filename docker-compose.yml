@@ -1,0 +1,39 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: meteorites
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ./src/WebApi
+    container_name: webapi
+    ports:
+      - "5000:8078"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+
+  worker:
+    build:
+      context: ./src/WorkerService
+    container_name: workerservice
+    depends_on:
+      - api
+
+  frontend:
+    build:
+      context: ./src/Frontend
+    container_name: frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
