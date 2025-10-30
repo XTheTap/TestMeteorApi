@@ -8,6 +8,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddHttpClient();
 builder.Services.AddHostedService<Worker>();
+builder.Services.Configure<MeteorSourceOptions>(builder.Configuration.GetSection("WorkerSettings"));
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
