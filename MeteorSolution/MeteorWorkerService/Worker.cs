@@ -1,4 +1,5 @@
-using System.Globalization;
+using Shared;
+using System.Text.Json;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -11,14 +12,17 @@ public class Worker : BackgroundService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<Worker> _logger;
     private readonly MeteorSourceOptions _options;
+    private readonly MeteoriteServiceHelper _helper;
 
     public Worker(IServiceProvider services, IHttpClientFactory httpClientFactory,
-     ILogger<Worker> logger, IOptions<MeteorSourceOptions> options)
+     ILogger<Worker> logger, IOptions<MeteorSourceOptions> options,
+     MeteoriteServiceHelper meteoriteServiceHelper)
     {
         _services = services;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _options = options.Value;
+        _helper = meteoriteServiceHelper;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -35,75 +39,94 @@ public class Worker : BackgroundService
             {
                 _logger.LogError(ex, "An error occurred during synchronization.");
             }
-        }
 
-        await Task.Delay(TimeSpan.FromMinutes(_options.SyncIntervalMinutes), stoppingToken);
+            await Task.Delay(TimeSpan.FromMinutes(_options.SyncIntervalMinutes), stoppingToken);
+        }
     }
 
     private async Task MeteoriteSynchronizeAsync(CancellationToken stoppingToken)
     {
-        var client = _httpClientFactory.CreateClient();
-        _logger.LogInformation("Starting meteorite data synchronization...");
-
-        var data = await client.GetFromJsonAsync<List<MeteoriteDto>>(_options.Url, stoppingToken);
-
-        if (data is null)
+        try
         {
-            _logger.LogWarning("Empty NASA response.");
-            return;
+            var client = _httpClientFactory.CreateClient();
+            _logger.LogInformation("Starting meteorite data synchronization...");
+
+            var data = await client.GetFromJsonAsync<List<MeteoriteDto>>(_options.Url, stoppingToken);
+
+            if (data is null || data.Count == 0)
+            {
+                _logger.LogWarning("Empty NASA response.");
+                return;
+            }
+
+            _logger.LogInformation("Get {Count} objects", data.Count);
+
+            await ProcessDataAsync(data, stoppingToken);
         }
-
-        _logger.LogInformation("Get {Count} objects", data.Count);
-
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network or HTTP error while fetching NASA data.");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Error parsing NASA JSON payload.");
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Database update failed during synchronization.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected synchronization error.");
+        }
+    }
+    
+    private async Task ProcessDataAsync(IEnumerable<MeteoriteDto> data, CancellationToken stoppingToken)
+    {
         using var scope = _services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var existing = await dbContext.Meteorites.AsNoTracking().ToListAsync(stoppingToken);
+        var existingDict = existing.ToDictionary(x => x.ExternalId, x => x);
+
+        var incomingIds = data.Select(d => d.Id).ToHashSet();
 
         foreach (var item in data)
         {
             if (stoppingToken.IsCancellationRequested)
             {
-                break;
+                return;
             }
 
-            var entity = MapToEntity(item);
+            if (_helper.ValidateDto(item))
+            {
+                continue;
+            }
 
-            if (string.IsNullOrWhiteSpace(item.Id)) continue;
+            var entity = _helper.MapToEntity(item);
 
-            var entityExisting = await dbContext.Meteorites
-                .AsTracking()
-                .FirstOrDefaultAsync(x => x.ExternalId == entity.ExternalId, stoppingToken);
-
-            if (entityExisting is null)
+            if (!existingDict.TryGetValue(item.Id, out var entitys))
             {
                 dbContext.Meteorites.Add(entity);
                 continue;
             }
 
-            dbContext.Entry(entityExisting).CurrentValues.SetValues(entity);
-            entityExisting.UpdatedAt = DateTime.UtcNow;
+            dbContext.Entry(entitys).CurrentValues.SetValues(entity);
+            entitys.UpdatedAt = DateTime.UtcNow;
+        }
+        
+        var toDelete = existing
+        .Where(e => !incomingIds
+        .Contains(e.ExternalId))
+        .ToList();
+
+        if (toDelete.Any())
+        {
+            dbContext.Meteorites.RemoveRange(toDelete);
+            _logger.LogInformation("Removed {Count} old values", toDelete.Count);
         }
 
         await dbContext.SaveChangesAsync(stoppingToken);
         _logger.LogInformation("Meteorite data synchronization completed.");
-    }
-    
-    private Meteorite MapToEntity(MeteoriteDto dto)
-    {
-        double? ParseDouble(string? s) =>
-            double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : null;
-
-        return new Meteorite
-        {
-            ExternalId = dto.Id,
-            Name = dto.Name,
-            Nametype = dto.Nametype,
-            Recclass = dto.Recclass,
-            Mass = ParseDouble(dto.Mass),
-            Fall = dto.Fall,
-            Year = dto.Year,
-            Reclat = ParseDouble(dto.Reclat),
-            Reclong = ParseDouble(dto.Reclong),
-            RawJson = System.Text.Json.JsonSerializer.Serialize(dto)
-        };
     }
 }

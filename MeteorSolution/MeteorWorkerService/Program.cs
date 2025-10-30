@@ -1,3 +1,4 @@
+using Shared;
 using Microsoft.EntityFrameworkCore;
 using MeteorWorkerService;
 
@@ -9,6 +10,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddHttpClient();
 builder.Services.AddHostedService<Worker>();
 builder.Services.Configure<MeteorSourceOptions>(builder.Configuration.GetSection("WorkerSettings"));
+builder.Services.AddSingleton(provider =>
+{
+    var logger = provider.GetRequiredService<ILogger<Worker>>();
+    return new MeteoriteServiceHelper(msg => logger.LogWarning(msg));
+});
+
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
