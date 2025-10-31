@@ -1,26 +1,10 @@
-version: "3.9"
-services:
-  api:
-    build:
-      context: ./src/WebApi
-    container_name: webapi
-    ports:
-      - "9999:8078"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+FROM node:20 AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
 
-  worker:
-    build:
-      context: ./src/WorkerService
-    container_name: workerservice
-    depends_on:
-      - api
-
-  frontend:
-    build:
-      context: ./src/Frontend
-    container_name: frontend
-    ports:
-      - "5173:80"
-    depends_on:
-      - api
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
