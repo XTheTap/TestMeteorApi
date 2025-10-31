@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   db:
     image: postgres:16
@@ -6,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: meteorites
+      POSTGRES_DB: nasa
     ports:
       - "5432:5432"
     volumes:
@@ -14,26 +13,31 @@ services:
 
   api:
     build:
-      context: ./src/WebApi
+      context: ./        
+      dockerfile: MeteorSolution/MeteorWebApi/Dockerfile
     container_name: webapi
     ports:
       - "5000:8078"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+    depends_on:
+      - worker
+      - db
 
   worker:
     build:
-      context: ./src/WorkerService
+      context: ./
+      dockerfile: MeteorSolution/MeteorWorkerService/Dockerfile
     container_name: workerservice
     depends_on:
-      - api
+      - db
 
   frontend:
     build:
-      context: ./src/Frontend
+      context: ./MeteorSolution/MeteorFront
     container_name: frontend
     ports:
-      - "5173:80"
+      - "5001:80"
     depends_on:
       - api
 
+volumes:
+  pgdata:
