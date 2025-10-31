@@ -8,9 +8,9 @@
 
 <script setup>
 import { ref } from "vue";
-import Filters from "@/components/Filters.vue";
-import MeteoritesTable from "@/components/MeteoritesTable.vue";
-import { getMeteorites } from "@/api/meteorites.js";
+import Filters from "/src/components/Filters.vue";
+import MeteoritesTable from "/src/components/MeteoriteTable.vue";
+import { getMeteorites } from "/src/api/meteorites.js";
 
 const meteorites = ref([]);
 const error = ref("");
