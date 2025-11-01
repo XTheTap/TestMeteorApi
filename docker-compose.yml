@@ -32,7 +32,7 @@ services:
       dockerfile: MeteorSolution/MeteorWebApi/Dockerfile
     container_name: webapi
     ports:
-      - "5000:8078"
+      - "5000:8080"
     depends_on:
       db:
         condition: service_healthy

@@ -1,9 +1,16 @@
 # Build
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-WORKDIR /app
+WORKDIR /src
+
+COPY MeteorSolution/Shared/Shared.csproj MeteorSolution/Shared/
+COPY MeteorSolution/MeteorWorkerService/MeteorWorkerService.csproj MeteorSolution/MeteorWorkerService/
+
+RUN dotnet restore MeteorSolution/MeteorWorkerService/MeteorWorkerService.csproj
+
 COPY . .
-RUN dotnet restore
-RUN dotnet publish -c Release -o out
+
+WORKDIR /src/MeteorSolution/MeteorWorkerService
+RUN dotnet publish -c Release -o /app/out
 
 # Runtime
 FROM mcr.microsoft.com/dotnet/runtime:9.0 AS runtime

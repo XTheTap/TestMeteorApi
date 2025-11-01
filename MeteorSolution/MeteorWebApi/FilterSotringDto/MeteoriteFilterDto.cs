@@ -13,6 +13,6 @@ public class MeteoriteFilterDto
     [MaxLength(100)]
     public string? NameContains { get; set; }
 
-    public string SortBy { get; set; } = "year"; // "year", "count", "mass"
+    public string SortBy { get; set; } = "year";
     public bool Desc { get; set; } = false;
 }

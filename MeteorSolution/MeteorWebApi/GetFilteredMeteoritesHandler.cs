@@ -39,6 +39,7 @@ public class GetFilteredMeteoritesHandler : IRequestHandler<GetFilteredMeteorite
             query = query.Where(m => m.Name.ToLower().Contains(f.NameContains.ToLower()));
 
         var grouped = await query
+            .Where(m => m.Year.HasValue)
             .GroupBy(m => m.Year!.Value.Year)
             .Select(g => new MeteoriteGroupDto
             {

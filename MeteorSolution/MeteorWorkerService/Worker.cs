@@ -87,7 +87,7 @@ public class Worker : BackgroundService
 
         dbContext.ChangeTracker.AutoDetectChangesEnabled = false;
 
-        var existingIds = await dbContext.Meteorites.AsNoTracking()
+        var existingIds = await dbContext.Meteorites
             .Select(x => x.ExternalId)
             .ToHashSetAsync(stoppingToken);
             

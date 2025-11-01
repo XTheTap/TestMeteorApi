@@ -10,10 +10,11 @@
       <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
     </select>
 
-    <select v-model="filters.class">
-      <option value="">Класс метеорита</option>
-      <option v-for="cls in classes" :key="cls" :value="cls">{{ cls }}</option>
-    </select>
+    <input
+      type="text"
+      v-model="filters.name"
+      placeholder="Класс метеорита..."
+    />
 
     <input
       type="text"
@@ -36,7 +37,6 @@ const filters = ref({
 });
 
 const years = Array.from({ length: 2025 - 1800 }, (_, i) => 1800 + i);
-const classes = ["Iron", "Chondrite", "Achondrite", "Unknown"];
 </script>
 
 <style scoped>
