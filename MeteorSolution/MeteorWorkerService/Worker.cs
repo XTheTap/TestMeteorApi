@@ -1,6 +1,5 @@
 using Shared;
 using System.Text.Json;
-using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -49,19 +48,13 @@ public class Worker : BackgroundService
         try
         {
             var client = _httpClientFactory.CreateClient();
-            _logger.LogInformation("Starting meteorite data synchronization...");
+            _logger.LogInformation("Starting meteorite data synchronization... \n Using URL: {Url}", _options.Url);
 
-            var data = await client.GetFromJsonAsync<List<MeteoriteDto>>(_options.Url, stoppingToken);
+            using var response = await client.GetAsync(_options.Url, HttpCompletionOption.ResponseHeadersRead, stoppingToken);
+            response.EnsureSuccessStatusCode();
 
-            if (data is null || data.Count == 0)
-            {
-                _logger.LogWarning("Empty NASA response.");
-                return;
-            }
-
-            _logger.LogInformation("Get {Count} objects", data.Count);
-
-            await ProcessDataAsync(data, stoppingToken);
+            await using var stream = await response.Content.ReadAsStreamAsync(stoppingToken);
+            await ProcessStreamAsync(stream, stoppingToken);
         }
         catch (HttpRequestException ex)
         {
@@ -80,53 +73,79 @@ public class Worker : BackgroundService
             _logger.LogError(ex, "Unexpected synchronization error.");
         }
     }
-    
-    private async Task ProcessDataAsync(IEnumerable<MeteoriteDto> data, CancellationToken stoppingToken)
+
+    private async Task ProcessStreamAsync(Stream jsonStream, CancellationToken stoppingToken)
     {
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var buffer = new List<Meteorite>(capacity: 500);
+        var incomingIds = new HashSet<string>();
+
         using var scope = _services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var existing = await dbContext.Meteorites.AsNoTracking().ToListAsync(stoppingToken);
-        var existingDict = existing.ToDictionary(x => x.ExternalId, x => x);
+        _logger.LogInformation($"Connection: {dbContext.Database.GetConnectionString()}");
 
-        var incomingIds = data.Select(d => d.Id).ToHashSet();
+        dbContext.ChangeTracker.AutoDetectChangesEnabled = false;
 
-        foreach (var item in data)
+        var existingIds = await dbContext.Meteorites.AsNoTracking()
+            .Select(x => x.ExternalId)
+            .ToHashSetAsync(stoppingToken);
+            
+        await foreach (var dto in JsonSerializer.DeserializeAsyncEnumerable<MeteoriteDto>(
+            jsonStream,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+            stoppingToken))
         {
             if (stoppingToken.IsCancellationRequested)
             {
                 return;
             }
 
-            if (_helper.ValidateDto(item))
+            if (dto is null)
             {
+                _logger.LogWarning("Received null DTO from JSON");
                 continue;
             }
+            
+            if (_helper.ValidateDto(dto))
+            {
+                var entity = _helper.MapToEntity(dto);
+                buffer.Add(entity);
+                incomingIds.Add(entity.ExternalId);
+            }
 
-            var entity = _helper.MapToEntity(item);
+            if (buffer.Count >= 500)
+            {
+                await UpsertBatchAsync(dbContext, buffer, existingIds, stoppingToken);
+                buffer.Clear();
+            }
+        }
 
-            if (!existingDict.TryGetValue(item.Id, out var entitys))
+        if (buffer.Count > 0)
+            await UpsertBatchAsync(dbContext, buffer, existingIds, stoppingToken);
+
+        var toDelete = await dbContext.Meteorites
+            .Where(m => !incomingIds.Contains(m.ExternalId))
+            .ToListAsync(stoppingToken);
+
+        _logger.LogInformation("Meteorite data synchronization completed.");
+    }
+
+    private static async Task UpsertBatchAsync(AppDbContext dbContext, List<Meteorite> batch, HashSet<string> existingIds, CancellationToken token)
+    {
+        foreach (var entity in batch)
+        {
+            if (existingIds.Contains(entity.ExternalId))
+            {
+                dbContext.Meteorites.Update(entity);
+            }
+            else
             {
                 dbContext.Meteorites.Add(entity);
-                continue;
+                existingIds.Add(entity.ExternalId);
             }
-
-            dbContext.Entry(entitys).CurrentValues.SetValues(entity);
-            entitys.UpdatedAt = DateTime.UtcNow;
-        }
-        
-        var toDelete = existing
-        .Where(e => !incomingIds
-        .Contains(e.ExternalId))
-        .ToList();
-
-        if (toDelete.Any())
-        {
-            dbContext.Meteorites.RemoveRange(toDelete);
-            _logger.LogInformation("Removed {Count} old values", toDelete.Count);
         }
 
-        await dbContext.SaveChangesAsync(stoppingToken);
-        _logger.LogInformation("Meteorite data synchronization completed.");
+        await dbContext.SaveChangesAsync(token);
     }
 }

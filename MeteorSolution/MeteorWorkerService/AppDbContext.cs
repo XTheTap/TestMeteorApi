@@ -8,6 +8,8 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasDefaultSchema("public");
+        
         modelBuilder.Entity<Meteorite>(entity =>
         {
             entity.ToTable("meteorites");

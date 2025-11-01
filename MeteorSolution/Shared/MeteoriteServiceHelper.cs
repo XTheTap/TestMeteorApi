@@ -31,6 +31,8 @@ public class MeteoriteServiceHelper
     {
         double? ParseDouble(string? s) =>
             double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : null;
+        
+        DateTime? ToUtc(DateTime? dt) => dt.HasValue ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc) : null;
 
         return new Meteorite
         {
@@ -40,7 +42,7 @@ public class MeteoriteServiceHelper
             Recclass = dto.Recclass,
             Mass = ParseDouble(dto.Mass),
             Fall = dto.Fall,
-            Year = dto.Year,
+            Year = ToUtc(dto.Year),
             Reclat = ParseDouble(dto.Reclat),
             Reclong = ParseDouble(dto.Reclong),
             RawJson = System.Text.Json.JsonSerializer.Serialize(dto)
