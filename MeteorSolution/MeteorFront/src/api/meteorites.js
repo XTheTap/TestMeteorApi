@@ -13,7 +13,6 @@ function normalizeItem(obj) {
     year: obj.year ?? obj.Year ?? null,
     count: obj.count ?? obj.Count ?? 0,
     totalMass: obj.totalMass ?? obj.TotalMass ?? 0,
-    // keep other fields as-is if needed
     ...obj,
   };
 }
@@ -35,7 +34,7 @@ export async function getMeteorites(filters) {
     buffer += value ? decoder.decode(value, { stream: true }) : "";
 
     const lines = buffer.split('\n');
-    buffer = lines.pop(); // keep last partial line
+    buffer = lines.pop();
 
     for (const line of lines) {
       if (!line) continue;

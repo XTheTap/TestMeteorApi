@@ -27,7 +27,6 @@ async function fetchData(filters) {
 }
 
 async function onSort(sortBy) {
-  // toggle sort direction if same column clicked twice
   const desc = lastFilters.Desc === true ? false : true;
   const filters = { ...lastFilters, SortBy: sortBy, Desc: desc };
   await fetchData(filters);

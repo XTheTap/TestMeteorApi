@@ -19,12 +19,10 @@ public class MeteoritesController : ControllerBase
     public async Task GetFiltered([FromQuery] MeteoriteFilterDto filter, CancellationToken token)
     {
         Response.StatusCode = StatusCodes.Status200OK;
-        // Use NDJSON (newline-delimited JSON) for simple streaming on the frontend
         Response.ContentType = "application/x-ndjson; charset=utf-8";
 
         await foreach (var item in _mediator.CreateStream(new GetFilteredMeteoritesQuery(filter), token))
         {
-            // Serialize each item individually followed by a newline so the client can parse incrementally
             await JsonSerializer.SerializeAsync(Response.Body, item, cancellationToken: token);
             await Response.Body.WriteAsync(new byte[] { (byte)'\n' }, token);
             await Response.Body.FlushAsync(token);
