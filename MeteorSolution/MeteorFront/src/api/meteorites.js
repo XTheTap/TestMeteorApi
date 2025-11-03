@@ -1,24 +1,62 @@
-import axios from "axios";
+const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000",
-  timeout: 5000,
-});
+function buildQuery(filters) {
+  if (!filters) return "";
+  const parts = Object.keys(filters)
+    .filter(k => filters[k] !== undefined && filters[k] !== null && filters[k] !== "")
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(filters[k])}`);
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+function normalizeItem(obj) {
+  return {
+    year: obj.year ?? obj.Year ?? null,
+    count: obj.count ?? obj.Count ?? 0,
+    totalMass: obj.totalMass ?? obj.TotalMass ?? 0,
+    // keep other fields as-is if needed
+    ...obj,
+  };
+}
 
 export async function getMeteorites(filters) {
-  try {
-    const response = await api.get("/api/meteorites/filter", { 
-      params: filters, 
-      paramsSerializer: (params) => {
-        return Object.keys(params)
-          .filter(key => params[key] !== undefined && params[key] !== null)
-          .map(key => `${key}=${encodeURIComponent(params[key])}`)
-          .join('&');
-        }
-    });
+  const url = `${apiBase}/api/meteorites/filter${buildQuery(filters)}`;
 
-    return response.data;
-  } catch (error) {
-    throw new Error("Get data failed");
+  const res = await fetch(url, { method: "GET" });
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+
+  const results = [];
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value ? decoder.decode(value, { stream: true }) : "";
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // keep last partial line
+
+    for (const line of lines) {
+      if (!line) continue;
+      try {
+        const parsed = JSON.parse(line);
+        results.push(normalizeItem(parsed));
+      } catch (e) {
+        console.error('ndjson parse error', e);
+      }
+    }
   }
+
+  // final buffer
+  if (buffer) {
+    try {
+      const parsed = JSON.parse(buffer);
+      results.push(normalizeItem(parsed));
+    } catch (e) {
+      console.error('ndjson final parse error', e);
+    }
+  }
+
+  return results;
 }

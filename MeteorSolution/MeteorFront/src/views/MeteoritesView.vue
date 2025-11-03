@@ -2,7 +2,7 @@
   <div>
     <Filters @apply="fetchData" />
     <div v-if="error" class="error">{{ error }}</div>
-    <MeteoritesTable :data="meteorites" />
+    <MeteoritesTable :data="meteorites" @sort="onSort" />
   </div>
 </template>
 
@@ -14,14 +14,23 @@ import { getMeteorites } from "/src/api/meteorites.js";
 
 const meteorites = ref([]);
 const error = ref("");
+let lastFilters = {};
 
 async function fetchData(filters) {
   try {
     error.value = "";
+    lastFilters = { ...filters };
     meteorites.value = await getMeteorites(filters);
   } catch (err) {
-    error.value = err.message;
+    error.value = err.message || String(err);
   }
+}
+
+async function onSort(sortBy) {
+  // toggle sort direction if same column clicked twice
+  const desc = lastFilters.Desc === true ? false : true;
+  const filters = { ...lastFilters, SortBy: sortBy, Desc: desc };
+  await fetchData(filters);
 }
 </script>
 

@@ -14,23 +14,20 @@ public class MeteoritesController : ControllerBase
     }
 
     [HttpGet("filter")]
-    [ProducesResponseType(typeof(IEnumerable<MeteoriteGroupDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task GetFiltered([FromQuery] MeteoriteFilterDto filter, CancellationToken token)
-{
-    Response.StatusCode = StatusCodes.Status200OK;
-    Response.ContentType = "application/json; charset=utf-8";
-
-    await using var writer = new Utf8JsonWriter(Response.Body, new JsonWriterOptions { Indented = false });
-    writer.WriteStartArray();
-
-    await foreach (var item in _mediator.CreateStream(new GetFilteredMeteoritesQuery(filter), token))
     {
-        JsonSerializer.Serialize(writer, item);
-        await writer.FlushAsync(token);
-    }
+        Response.StatusCode = StatusCodes.Status200OK;
+        // Use NDJSON (newline-delimited JSON) for simple streaming on the frontend
+        Response.ContentType = "application/x-ndjson; charset=utf-8";
 
-    writer.WriteEndArray();
-    await writer.FlushAsync(token);
-}
+        await foreach (var item in _mediator.CreateStream(new GetFilteredMeteoritesQuery(filter), token))
+        {
+            // Serialize each item individually followed by a newline so the client can parse incrementally
+            await JsonSerializer.SerializeAsync(Response.Body, item, cancellationToken: token);
+            await Response.Body.WriteAsync(new byte[] { (byte)'\n' }, token);
+            await Response.Body.FlushAsync(token);
+        }
+    }
 }
