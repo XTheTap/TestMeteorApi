@@ -1,12 +1,13 @@
 using MediatR;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Caching.Memory;
 
 public record GetFilteredMeteoritesQuery(MeteoriteFilterDto Filter)
-    : IRequest<IEnumerable<MeteoriteGroupDto>>;
+    : IStreamRequest<MeteoriteGroupDto>;
 
-public class GetFilteredMeteoritesHandler : IRequestHandler<GetFilteredMeteoritesQuery, IEnumerable<MeteoriteGroupDto>>
+public class GetFilteredMeteoritesHandler : IStreamRequestHandler<GetFilteredMeteoritesQuery, MeteoriteGroupDto>
 {
     private readonly AppDbContext _db;
     private readonly IMemoryCache _cache;
@@ -17,47 +18,65 @@ public class GetFilteredMeteoritesHandler : IRequestHandler<GetFilteredMeteorite
         _cache = cache;
     }
 
-    public async Task<IEnumerable<MeteoriteGroupDto>> Handle(GetFilteredMeteoritesQuery request, CancellationToken ct)
+    public async IAsyncEnumerable<MeteoriteGroupDto> Handle(GetFilteredMeteoritesQuery request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var key = $"meteorites:{JsonSerializer.Serialize(request.Filter)}";
         if (_cache.TryGetValue(key, out IEnumerable<MeteoriteGroupDto>? cached))
-            return cached!;
+        {
+            foreach (var meteor in cached!)
+            {
+                yield return meteor;
+            }
+            yield break;
+        }
 
-        var f = request.Filter;
+        var filter = request.Filter;
         var query = _db.Meteorites.AsNoTracking().AsQueryable();
 
-        if (f.YearFrom.HasValue)
-            query = query.Where(m => m.Year >= new DateTime(f.YearFrom.Value, 1, 1));
+        if (filter.YearFrom.HasValue)
+            query = query.Where(m => m.Year >= new DateTime(filter.YearFrom.Value, 1, 1));
 
-        if (f.YearTo.HasValue)
-            query = query.Where(m => m.Year <= new DateTime(f.YearTo.Value, 12, 31));
+        if (filter.YearTo.HasValue)
+            query = query.Where(m => m.Year <= new DateTime(filter.YearTo.Value, 12, 31));
 
-        if (!string.IsNullOrWhiteSpace(f.Recclass))
-            query = query.Where(m => m.Recclass!.ToLower() == f.Recclass.ToLower());
+        if (!string.IsNullOrWhiteSpace(filter.Recclass))
+            query = query.Where(m => m.Recclass!.ToLower() == filter.Recclass.ToLower());
 
-        if (!string.IsNullOrWhiteSpace(f.NameContains))
-            query = query.Where(m => m.Name.ToLower().Contains(f.NameContains.ToLower()));
+        if (!string.IsNullOrWhiteSpace(filter.NameContains))
+            query = query.Where(m => m.Name.ToLower().Contains(filter.NameContains.ToLower()));
 
-        var grouped = await query
-            .Where(m => m.Year.HasValue)
-            .GroupBy(m => m.Year!.Value.Year)
-            .Select(g => new MeteoriteGroupDto
-            {
-                Year = g.Key,
-                Count = g.Count(),
-                TotalMass = g.Sum(x => x.Mass ?? 0)
-            })
-            .ToListAsync(ct);
+        var groups = new Dictionary<int, MeteoriteGroupDto>();
 
-        grouped = f.SortBy switch
+        await foreach (var m in query.AsAsyncEnumerable().WithCancellation(cancellationToken))
         {
-            "count" => f.Desc ? grouped.OrderByDescending(x => x.Count).ToList() : grouped.OrderBy(x => x.Count).ToList(),
-            "mass" => f.Desc ? grouped.OrderByDescending(x => x.TotalMass).ToList() : grouped.OrderBy(x => x.TotalMass).ToList(),
-            _ => f.Desc ? grouped.OrderByDescending(x => x.Year).ToList() : grouped.OrderBy(x => x.Year).ToList()
+            if (!m.Year.HasValue) continue;
+            var year = m.Year.Value.Year;
+
+            if (!groups.TryGetValue(year, out var dto))
+            {
+                dto = new MeteoriteGroupDto { Year = year };
+                groups[year] = dto;
+            }
+
+            dto.Count++;
+            dto.TotalMass += m.Mass ?? 0;
+        }
+
+        var result = groups.Values.AsEnumerable();
+
+        result = request.Filter.SortBy switch
+        {
+            "count" => request.Filter.Desc ? result.OrderByDescending(x => x.Count) : result.OrderBy(x => x.Count),
+            "mass" => request.Filter.Desc ? result.OrderByDescending(x => x.TotalMass) : result.OrderBy(x => x.TotalMass),
+            _ => request.Filter.Desc ? result.OrderByDescending(x => x.Year) : result.OrderBy(x => x.Year)
         };
 
-        _cache.Set(key, grouped, TimeSpan.FromMinutes(1));
+        var list = result.ToList();
+        _cache.Set(key, list, TimeSpan.FromMinutes(30));
 
-        return grouped;
+        foreach (var dto in list)
+        {
+            yield return dto;
+        }
     }
 }
