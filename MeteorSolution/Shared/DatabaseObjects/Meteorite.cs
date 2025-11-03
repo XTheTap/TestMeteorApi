@@ -6,7 +6,8 @@ public class Meteorite
     public string ExternalId { get; set; } = default!;
     public string Name { get; set; } = default!;
     public string? Nametype { get; set; }
-    public string? Recclass { get; set; }
+    public int? RecclassId { get; set; }
+    public MeteorRecclass? Recclass { get; set; }
     public double? Mass { get; set; }
     public string? Fall { get; set; }
     public DateTime? Year { get; set; }

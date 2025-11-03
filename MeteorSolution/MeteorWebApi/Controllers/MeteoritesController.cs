@@ -28,4 +28,12 @@ public class MeteoritesController : ControllerBase
             await Response.Body.FlushAsync(token);
         }
     }
+
+    [HttpGet("types")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetTypes(CancellationToken token)
+    {
+        var types = await _mediator.Send(new GetMeteoriteTypesQuery(), token);
+        return Ok(types);
+    }
 }

@@ -27,7 +27,7 @@ public class MeteoriteServiceHelper
         return isValid;
     }
 
-    public Meteorite MapToEntity(MeteoriteDto dto)
+    public Meteorite MapToEntity(MeteoriteDto dto, MeteorRecclass? recclass)
     {
         double? ParseDouble(string? s) =>
             double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : null;
@@ -39,13 +39,13 @@ public class MeteoriteServiceHelper
             ExternalId = dto.Id,
             Name = dto.Name,
             Nametype = dto.Nametype,
-            Recclass = dto.Recclass,
+            Recclass = recclass,
             Mass = ParseDouble(dto.Mass),
             Fall = dto.Fall,
             Year = ToUtc(dto.Year),
             Reclat = ParseDouble(dto.Reclat),
             Reclong = ParseDouble(dto.Reclong),
-            RawJson = System.Text.Json.JsonSerializer.Serialize(dto)
+            RawJson = System.Text.Json.JsonSerializer.Serialize(dto.Geolocation)
         };
     }
 }

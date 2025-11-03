@@ -39,8 +39,8 @@ public class GetFilteredMeteoritesHandler : IStreamRequestHandler<GetFilteredMet
         if (filter.YearTo.HasValue)
             query = query.Where(m => m.Year <= new DateTime(filter.YearTo.Value, 12, 31));
 
-        if (!string.IsNullOrWhiteSpace(filter.Recclass))
-            query = query.Where(m => m.Recclass!.ToLower() == filter.Recclass.ToLower());
+        if (filter.Recclass is not null)
+            query = query.Where(m => m.Recclass!.Id == filter.Recclass);
 
         if (!string.IsNullOrWhiteSpace(filter.NameContains))
             query = query.Where(m => m.Name.ToLower().Contains(filter.NameContains.ToLower()));

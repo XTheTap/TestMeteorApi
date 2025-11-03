@@ -76,43 +76,42 @@ public class Worker : BackgroundService
 
     private async Task ProcessStreamAsync(Stream jsonStream, CancellationToken stoppingToken)
     {
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var buffer = new List<Meteorite>(capacity: 500);
-        var incomingIds = new HashSet<string>();
-
         using var scope = _services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        _logger.LogInformation($"Connection: {dbContext.Database.GetConnectionString()}");
+        var recclassCache = await dbContext.MeteorRecclasses
+            .ToDictionaryAsync(x => x.Name, StringComparer.OrdinalIgnoreCase, stoppingToken);
 
-        dbContext.ChangeTracker.AutoDetectChangesEnabled = false;
+        var buffer = new List<Meteorite>(capacity: 500);
+        var incomingIds = new HashSet<string>();
 
         var existingIds = await dbContext.Meteorites
             .Select(x => x.ExternalId)
             .ToHashSetAsync(stoppingToken);
-            
+
         await foreach (var dto in JsonSerializer.DeserializeAsyncEnumerable<MeteoriteDto>(
             jsonStream,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
             stoppingToken))
         {
-            if (stoppingToken.IsCancellationRequested)
+            if (dto is null || !_helper.ValidateDto(dto)) continue;
+
+            MeteorRecclass? recclass = null;
+            if (!string.IsNullOrWhiteSpace(dto.Recclass))
             {
-                return;
+                var name = dto.Recclass.Trim();
+
+                if (!recclassCache.TryGetValue(name, out recclass))
+                {
+                    recclass = new MeteorRecclass { Name = name };
+                    dbContext.MeteorRecclasses.Add(recclass);
+                    recclassCache[name] = recclass;
+                }
             }
 
-            if (dto is null)
-            {
-                _logger.LogWarning("Received null DTO from JSON");
-                continue;
-            }
-            
-            if (_helper.ValidateDto(dto))
-            {
-                var entity = _helper.MapToEntity(dto);
-                buffer.Add(entity);
-                incomingIds.Add(entity.ExternalId);
-            }
+            var entity = _helper.MapToEntity(dto, recclass);
+            buffer.Add(entity);
+            incomingIds.Add(entity.ExternalId);
 
             if (buffer.Count >= 500)
             {

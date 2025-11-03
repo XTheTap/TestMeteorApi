@@ -8,7 +8,7 @@ public class MeteoriteFilterDto
     [Range(1000, 3000)]
     public int? YearTo { get; set; }
 
-    public string? Recclass { get; set; }
+    public int? Recclass { get; set; }
 
     [MaxLength(100)]
     public string? NameContains { get; set; }

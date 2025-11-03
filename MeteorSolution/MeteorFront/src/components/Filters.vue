@@ -10,11 +10,10 @@
       <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
     </select>
 
-    <input
-      type="text"
-      v-model="filters.Recclass"
-      placeholder="Класс метеорита..."
-    />
+    <select v-model="filters.RecclassId">
+      <option value="">Класс метеорита...</option>
+      <option v-for="opt in recclassOptions" :key="opt.id" :value="opt.id">{{ opt.name }}</option>
+    </select>
 
     <input
       type="text"
@@ -37,15 +36,27 @@
 </template>
 
 <script setup>
-import { reactive } from "vue";
+import { reactive, ref, onMounted } from "vue";
+import { getMeteoriteTypes } from "../api/meteorites";
 
 const filters = reactive({
   YearFrom: "",
   YearTo: "",
-  Recclass: "",
+  RecclassId: "",
   NameContains: "",
   SortBy: "year",
   Desc: false,
+});
+
+const recclassOptions = ref([]);
+
+onMounted(async () => {
+  try {
+    const types = await getMeteoriteTypes();
+    recclassOptions.value = (types || []).map(t => ({ id: t.id ?? t.Id, name: t.name ?? t.Name }));
+  } catch (e) {
+    console.error('Failed to load meteorite types', e);
+  }
 });
 
 const years = Array.from({ length: 2025 - 1800 }, (_, i) => 1800 + i);

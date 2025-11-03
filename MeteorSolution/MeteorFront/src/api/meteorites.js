@@ -47,7 +47,6 @@ export async function getMeteorites(filters) {
     }
   }
 
-  // final buffer
   if (buffer) {
     try {
       const parsed = JSON.parse(buffer);
@@ -58,4 +57,11 @@ export async function getMeteorites(filters) {
   }
 
   return results;
+}
+
+export async function getMeteoriteTypes() {
+  const url = `${apiBase}/api/meteorites/types`;
+  const res = await fetch(url, { method: "GET" });
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  return await res.json();
 }
