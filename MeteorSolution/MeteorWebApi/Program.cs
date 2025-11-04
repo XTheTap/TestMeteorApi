@@ -29,7 +29,11 @@ var app = builder.Build();
 
 app.MapOpenApi();
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "MeteorWebApi v1");
+    c.RoutePrefix = string.Empty; 
+});
 
 using (var scope = app.Services.CreateScope())
 {
