@@ -10,6 +10,8 @@ function buildQuery(filters) {
 
 function normalizeItem(obj) {
   return {
+    meteorName: obj.meteorName ?? obj.MeteorName ?? obj.name ?? "Unknown",
+    recclassText: obj.recclassText ?? obj.RecclassText ?? obj.recclass ?? "Unknown",
     year: obj.year ?? obj.Year ?? null,
     count: obj.count ?? obj.Count ?? 0,
     totalMass: obj.totalMass ?? obj.TotalMass ?? 0,

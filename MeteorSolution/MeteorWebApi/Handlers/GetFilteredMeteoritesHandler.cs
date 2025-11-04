@@ -21,6 +21,8 @@ public class GetFilteredMeteoritesHandler : IStreamRequestHandler<GetFilteredMet
     public async IAsyncEnumerable<MeteoriteGroupDto> Handle(GetFilteredMeteoritesQuery request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var key = $"meteorites:{JsonSerializer.Serialize(request.Filter)}";
+        var recclassCacheKey = "meteor_recclasses";
+        
         if (_cache.TryGetValue(key, out IEnumerable<MeteoriteGroupDto>? cached))
         {
             foreach (var meteor in cached!)
@@ -45,6 +47,16 @@ public class GetFilteredMeteoritesHandler : IStreamRequestHandler<GetFilteredMet
         if (!string.IsNullOrWhiteSpace(filter.NameContains))
             query = query.Where(m => m.Name.ToLower().Contains(filter.NameContains.ToLower()));
 
+        if (!_cache.TryGetValue(recclassCacheKey, out Dictionary<int, string>? recclassDict))
+        {
+            recclassDict = await _db.MeteorRecclasses
+                .AsNoTracking()
+                .ToDictionaryAsync(r => r.Id, r => r.Name, cancellationToken);
+            _cache.Set(recclassCacheKey, recclassDict, TimeSpan.FromHours(1));
+        }
+
+        recclassDict ??= new Dictionary<int, string>();
+
         var groups = new Dictionary<int, MeteoriteGroupDto>();
 
         await foreach (var m in query.AsAsyncEnumerable().WithCancellation(cancellationToken))
@@ -60,6 +72,10 @@ public class GetFilteredMeteoritesHandler : IStreamRequestHandler<GetFilteredMet
 
             dto.Count++;
             dto.TotalMass += m.Mass ?? 0;
+            dto.MeteorName = m.Name;
+            dto.RecclassText = (m.RecclassId.HasValue && recclassDict.TryGetValue(m.RecclassId.Value, out var rcName))
+                ? rcName
+                : m.Recclass?.Name ?? "Unknown";
         }
 
         var result = groups.Values.AsEnumerable();
